@@ -1,0 +1,362 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" xmlns:s="library://ns.adobe.com/flex/spark" xmlns:mx="library://ns.adobe.com/flex/mx" width="1280" height="720" maxHeight="720" maxWidth="1280" addedToStage="create(event);" showStatusBar="false"
+					   xmlns:c="*" backgroundColor="0xcccccc">
+
+	<fx:Script>
+		<![CDATA[
+			import flash.display.BitmapData;
+			import flash.display.Sprite;
+			import flash.events.Event
+			import flash.events.MouseEvent;
+			import com.mcv.utils.JsonTestString;
+			import flash.geom.Matrix;
+			import flash.geom.Rectangle;
+			import flash.net.FileFilter;
+			import flash.net.FileReference;
+			import flash.utils.ByteArray;
+			import flash.utils.Dictionary;
+			import spark.core.SpriteVisualElement;
+			import com.mcv.utils.ImageContainer;
+			import com.mcv.utils.GoogleImageAPI;
+			import JPEGEncoder;
+			import mx.utils.ObjectUtil;
+			
+			[Bindable]
+			private var stageWidth:Number = 0;
+			
+			[Bindable]
+			private var stageHeight:Number = 0;
+			
+			private var googleImage:GoogleImageAPI;
+			
+			private var count:int;
+			
+			[Bindable]
+			private var image_source_1:String;
+			
+			[Bindable]
+			private var image_source_2:String;
+			
+			private var imageDictionary:Array = new Array();
+			
+			private var bitmap_1:ImageContainer;
+			private var bitmap_2:ImageContainer;
+			
+			private function create(event:Event):void
+			{
+				addEventListener("item_click_selected", itemClickedHandler, true);
+				
+				googleImage = new GoogleImageAPI();
+				
+				stageWidth = stage.stageWidth;
+				stageHeight = stage.stageHeight;
+				stage.addEventListener(Event.RESIZE, resizeEvent);
+			}
+			
+			private function resizeEvent(event:Event):void
+			{
+				stageWidth = stage.stageWidth;
+				stageHeight = stage.stageHeight;
+			}
+			
+			private function itemClickedHandler(event:Event):void
+			{
+				event.target.isSelected = !event.target.isSelected;
+				
+				if (!event.target.isSelected)
+				{
+					if (event.target.name == "1")
+					{
+						imageDictionary.shift();
+						image_source_2 = null;
+					}
+					else
+					{
+						imageDictionary.pop();
+					}
+					
+					this["image_source_" + event.target.name] = null;
+				}
+				else
+				{
+					imageDictionary.push({target: event.target, source: event.target.image_source});
+					event.target.name = String(imageDictionary.length);
+					if (imageDictionary.length > 2)
+					{
+						imageDictionary[0].target.isSelected = false;
+						imageDictionary.shift();
+					}
+				}
+				
+				for (var i:int = 0; i < imageDictionary.length; i++)
+				{
+					imageDictionary[i].target.name = String(i + 1);
+					this["image_source_" + String(i + 1)] = imageDictionary[i].source;
+				}
+				
+				if (imageDictionary.length == 2)
+				{
+					nextBtn.enabled = true;
+				}
+				else
+				{
+					nextBtn.enabled = false;
+				}
+			}
+			
+			private function searchClickHandler(event:MouseEvent):void
+			{
+				loading.visible = false;
+				googleImage.addEventListener(GoogleImageAPI.SEARCH_COMPLETE, searchComplete);
+				googleImage.addEventListener(GoogleImageAPI.SEARCH_ERROR, searchErrorHandler);
+				if (inputText.text != "")
+				{
+					loading_search.text = "Loading Search Results...";
+					googleImage.search(inputText.text);
+					loading.visible = true;
+				}
+			}
+			
+			private function searchErrorHandler(event:Event):void
+			{
+				googleImage.removeEventListener(GoogleImageAPI.SEARCH_ERROR, searchErrorHandler);
+				loading_search.text = "Search error, please try again.";
+				inputText.text = "";
+			}
+			
+			private function searchComplete(event:Event):void
+			{
+				var array:Array = googleImage.objectResults;
+				
+				for (var i:String in array)
+				{
+					var object:Object = {image_source: array[i]};
+					mainList.dataProvider.addItemAt(object, 0);
+				}
+				
+				googleImage.removeEventListener(GoogleImageAPI.SEARCH_COMPLETE, searchComplete);
+				
+				loading.visible = false;
+				inputText.text = "";
+			}
+			
+			private function nextClickHandler(event:MouseEvent):void
+			{
+				page_1.visible = false;
+				page_2.visible = true;
+				
+				image_source_1 = imageDictionary[0].source;
+				image_source_2 = imageDictionary[1].source;
+				
+				bitmap_1 = new ImageContainer(image_source_1, (stageWidth / 2) - 50, stageHeight - 50);
+				bitmap_1.name = "1";
+				bitmap_1.addEventListener(ImageContainer.BITMAP_COMPLETE, bitmapComplete);
+				image_1.addChild(bitmap_1);
+				bitmap_1.addEventListener(ImageContainer.CROPPED, bitmapCropped);
+				
+				bitmap_2 = new ImageContainer(image_source_2, (stageWidth / 2) - 50, stageHeight - 50)
+				bitmap_2.name = "2";
+				bitmap_2.addEventListener(ImageContainer.BITMAP_COMPLETE, bitmapComplete);
+				image_2.addChild(bitmap_2);
+				bitmap_2.addEventListener(ImageContainer.CROPPED, bitmapCropped);
+			}
+			
+			private function bitmapCropped(event:Event):void
+			{
+				dividingLine.visible = false;
+				count++;
+				
+				if (count == 2)
+				{
+					dividingLine.visible = false;
+					nextBtn2.visible = true;
+					switchPlaces.visible = true;
+					crop_instructions.visible = false;
+					slide_instructions.visible = true;
+				}
+				
+				if (event.target.name == "1")
+				{
+					image_1.x = boxes.x;
+					image_1.y = boxes.y;
+				}
+				else
+				{
+					image_2.x = (boxes.x + boxes.width / 2);
+					image_2.y = boxes.y;
+				}
+			}
+			
+			private function bitmapComplete(event:Event):void
+			{
+				if (event.target.name == "1")
+				{
+					image_1.x = 25;
+					image_1.y = (stageHeight - event.target.bitmapHeight) / 2;
+				}
+				else
+				{
+					image_2.x = (stageWidth - 25) - event.target.bitmapWidth;
+					image_2.y = (stageHeight - event.target.bitmapHeight) / 2;
+				}
+			}
+			
+			private function previousClickHandler(event:MouseEvent):void
+			{
+				page_1.visible = true;
+				page_2.visible = false;
+				dividingLine.visible = true;
+				nextBtn2.visible = false;
+				switchPlaces.visible = false;
+				slide_instructions.visible = false;
+				crop_instructions.visible = true;
+				
+				count = 0;
+				
+				image_1.removeChild(bitmap_1);
+				image_2.removeChild(bitmap_2);
+				
+				bitmap_1 = null;
+				bitmap_2 = null;
+			}
+			
+			private function switchPlacesHandler(event:MouseEvent):void
+			{
+				if (image_1.x != boxes.x)
+				{
+					image_1.x = boxes.x;
+					image_1.y = boxes.y;
+					
+					image_2.x = (boxes.x + boxes.width / 2);
+					image_2.y = boxes.y;
+				}
+				else
+				{
+					image_1.x = (boxes.x + boxes.width / 2);
+					image_1.y = boxes.y;
+					
+					image_2.x = boxes.x;
+					image_2.y = boxes.y;
+				}
+			}
+			
+			private function lastStepClickHandler(event:MouseEvent):void
+			{
+				var myBitmapData:BitmapData = new BitmapData(500, 400);
+				var matrix:Matrix = new Matrix();
+				matrix.translate(-boxes.x, -boxes.y);
+				myBitmapData.draw(this, matrix);
+				var jpgEncoder:JPEGEncoder = new JPEGEncoder(80);
+				var imgByteData:ByteArray = jpgEncoder.encode(myBitmapData);
+				var file:FileReference = new FileReference();
+				file.save(imgByteData, "image-" + new Date().toDateString() + ".jpg");
+			}
+			
+			private function dragImage():void
+			{
+			
+			}
+		]]>
+	</fx:Script>
+
+	<s:Group width="100%" top="10" bottom="10" id="page_1">
+
+		<s:Group height="30" width="400" horizontalCenter="0">
+			<s:TextArea id="inputText" height="100%" width="300" />
+			<s:Button height="100%" label="Search" click="searchClickHandler(event);" right="0" />
+		</s:Group>
+
+		<s:List id="mainList" allowMultipleSelection="true" rollOverColor="0x171d23" selectionColor="0x282d34" left="10" right="220" top="50" bottom="50" contentBackgroundColor="0x282d34"
+				contentBackgroundAlpha="1" useVirtualLayout="false" borderAlpha="0">
+			<s:layout>
+				<s:TileLayout />
+			</s:layout>
+			<mx:ArrayList />
+			<s:itemRenderer>
+				<fx:Component>
+					<s:ItemRenderer height="150" width="150" click="this.dispatchEvent(new Event('item_click_selected'));" creationComplete="{image_source = data.image_source}">
+						<fx:Script>
+							<![CDATA[
+								[Bindable]
+								public var isSelected:Boolean;
+								
+								[Bindable]
+								public var image_source:String;
+							]]>
+						</fx:Script>
+
+						<s:Rect id="selecter" height="100%" width="100%" radiusX="0" radiusY="0" visible="{isSelected}">
+							<s:fill>
+								<s:LinearGradient>
+									<s:GradientEntry color="#999999" ratio="0" alpha="1" />
+									<s:GradientEntry color="#cccccc" ratio=".33" alpha="1" />
+									<s:GradientEntry color="#ffffff" ratio=".66" alpha="1" />
+								</s:LinearGradient>
+							</s:fill>
+						</s:Rect>
+
+						<s:Rect height="100%" width="100%" radiusX="0" radiusY="0">
+							<s:stroke>
+								<s:SolidColorStroke color="0x000000" weight="1" />
+							</s:stroke>
+						</s:Rect>
+
+						<s:Image id="image" source="{data.image_source}" width="90%" height="90%" horizontalCenter="0" verticalCenter="0" ioError="{Object(owner).dataProvider.removeItemAt(itemIndex);}" mouseChildren="false" />
+
+					</s:ItemRenderer>
+				</fx:Component>
+			</s:itemRenderer>
+		</s:List>
+
+		<s:Group width="200" right="10" top="50">
+			<s:Group>
+				<s:layout>
+					<s:VerticalLayout gap="20" />
+				</s:layout>
+
+				<s:Label text="Your Selections" width="100%" height="20" fontSize="18" textAlign="center" />
+				<s:Image id="imageSelection_1" source="{image_source_1}" width="200" height="180" mouseChildren="false" horizontalCenter="0" />
+
+				<s:Image id="imageSelection_2" source="{image_source_2}" width="200" height="180" mouseChildren="false" horizontalCenter="0" />
+			</s:Group>
+		</s:Group>
+
+		<s:Button id="nextBtn" height="30" label="Next Step" enabled="false" bottom="0" click="nextClickHandler(event);" horizontalCenter="0" />
+
+
+		<s:Group id="loading" width="400" height="60" horizontalCenter="0" verticalCenter="0" visible="false">
+			<s:Rect height="100%" width="100%" radiusX="9" radiusY="9">
+				<s:fill>
+					<s:SolidColor color="0" />
+				</s:fill>
+			</s:Rect>
+			<s:Label id="loading_search" text="" height="20" fontSize="21" horizontalCenter="0" verticalCenter="0" width="100%" textAlign="center" color="0xffffff" />
+		</s:Group>
+
+	</s:Group>
+
+	<s:Group id="page_2" visible="false" width="100%" height="100%">
+
+		<s:Group id="boxes" width="500" height="400" horizontalCenter="0" verticalCenter="0" visible="false">
+		</s:Group>
+
+		<s:Group id="dividingLine" width="100%" height="100%">
+			<s:Line xFrom="{stageWidth/2}" xTo="{stageWidth/2}" yFrom="50" yTo="{stageHeight-50}" alpha=".5">
+				<s:stroke>
+					<s:SolidColorStroke color="0x000000" weight="3" />
+				</s:stroke>
+			</s:Line>
+		</s:Group>
+
+		<s:SpriteVisualElement id="image_1" />
+		<s:SpriteVisualElement id="image_2" />
+
+		<s:Button id="previousBtn" height="30" label="Search" width="120" click="previousClickHandler(event);" left="10" top="10" />
+		<s:Button id="nextBtn2" height="30" label="Export Image" width="150" click="lastStepClickHandler(event);" bottom="70" horizontalCenter="170" visible="false" />
+		<s:Button id="switchPlaces" height="30" label="Switch Image Places" width="150" click="switchPlacesHandler(event);" bottom="70" horizontalCenter="-170" visible="false" />
+
+		<s:Label id="crop_instructions" text="Right click over image to show crop tool, drag tool to desired area and double click to crop." width="100%" height="20" bottom="0" fontSize="18" textAlign="center" />
+		<s:Label id="slide_instructions" text="Drag the 'Like VS Share' image up or down to position." width="100%" height="20" bottom="0" fontSize="18" textAlign="center" visible="false" />
+	</s:Group>
+
+</s:WindowedApplication>
